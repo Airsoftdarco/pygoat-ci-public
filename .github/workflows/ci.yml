@@ -1,1 +1,116 @@
+name: ci
 
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+
+  # ── JOB 1A: Bandit SAST ───────────────────────────────────────────
+  bandit_scan:
+    name: Run Bandit Scan
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit (skip LOW severity and confidence)
+        run: |
+          bandit -r . \
+            --severity-level medium \
+            --confidence-level medium \
+            --exclude ./.venv,./tests \
+            -f sarif \
+            -o sast-bandit.sarif \
+            || true
+
+      - name: Upload Bandit SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sast-bandit.sarif
+          category: bandit
+
+      - name: Upload Bandit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-bandit
+          path: sast-bandit.sarif
+
+  # ── JOB 1B: Semgrep SAST (en paralelo con Bandit) ─────────────────
+  semgrep_scan:
+    name: Run Semgrep Scan
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep:latest
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep (ERROR=Crítico/Alto, WARNING=Medio)
+        run: |
+          semgrep scan \
+            --severity=ERROR \
+            --severity=WARNING \
+            --sarif \
+            --output=sast-semgrep.sarif \
+            || true
+
+      - name: Upload Semgrep SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sast-semgrep.sarif
+          category: semgrep
+
+      - name: Upload Semgrep artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-semgrep
+          path: sast-semgrep.sarif
+
+  # ── JOB 2: Build Docker + Docker Scout ────────────────────────────
+  build_and_scout:
+    name: Build Docker Image & Scout Scan
+    runs-on: ubuntu-latest
+    needs: [bandit_scan, semgrep_scan]
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pygoat:latest
+          load: true
+
+      - name: Docker Scout CVE scan
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: ${{ secrets.DOCKERHUB_USERNAME }}/pygoat:latest
+          only-severities: critical,high
+          exit-code: false
