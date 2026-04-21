@@ -1,58 +1,57 @@
-name: CI
+name: ci
 
-on: [push]
+on:
+  push:
+    branches: [ "master", "main" ]
 
 jobs:
-  # TRABAJO 1: BANDIT (Tu código)
-  sast_scan:
+  # TRABAJO 1: BANDIT (Formato SARIF)
+  bandit_scan:
     name: Run Bandit Scan
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: 3.11
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install Bandit
-      run: pip install bandit
+      - name: Install Bandit and SARIF formatter
+        # Bandit necesita un plugin extra para poder escribir en formato SARIF
+        run: |
+          pip install bandit
+          pip install bandit-sarif-formatter
 
-    - name: Run Bandit Scan
-      run: bandit -ll -ii -r . -f json -o bandit-report.json || true
+      - name: Run Bandit Scan
+        # Cambiamos json por sarif
+        run: bandit -r . -f sarif -o sast-bandit.sarif -ll -ii || true
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-       name: bandit-findings
-       path: bandit-report.json
+      - name: Upload Bandit SARIF to Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: sast-bandit.sarif
+          category: bandit
 
-  # TRABAJO 2: SEMGREP (Se ejecutará en paralelo automáticamente)
+  # TRABAJO 2: SEMGREP (Formato SARIF)
   semgrep_scan:
     name: Run Semgrep Scan
     runs-on: ubuntu-latest
     container:
       image: returntocorp/semgrep:latest
-      
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: 3.11
-        
-    - name: Run Semgrep
-      # Ejecuta el escaneo ignorando vulnerabilidades bajas y exporta a JSON
-      run: semgrep scan --severity=ERROR --severity WARNING --json --output=sast-semgrep.json || true
-      
-    - name: Upload Semgrep Artifact
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: semgrep-findings
-        path: sast-semgrep.json
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        # Semgrep ya soporta SARIF de forma nativa cambiando el flag
+        run: semgrep scan --severity=ERROR --severity WARNING --sarif --output=sast-semgrep.sarif || true
+
+      - name: Upload Semgrep SARIF to Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: sast-semgrep.sarif
+          category: semgrep
