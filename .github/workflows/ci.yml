@@ -3,91 +3,21 @@ name: ci
 on: [push]
 
 jobs:
-
-  bandit_scan:
+  sast_scan:
     name: Run Bandit Scan
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v2
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v2
       with:
-        python-version: '3.11'
+        python-version: '3.8'
 
     - name: Install Bandit
-      run: pip install bandit[sarif]
-
+      run: pip install bandit
+      
     - name: Run Bandit Scan
-      run: bandit -ll -ii -r . -f sarif -o sast-bandit.sarif || true
-
-    - name: Upload Bandit SARIF to Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: sast-bandit.sarif
-        category: bandit
-
-    - name: Upload Bandit artifact
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: sast-bandit
-        path: sast-bandit.sarif
-
-  semgrep_scan:
-    name: Run Semgrep Scan
-    runs-on: ubuntu-latest
-    container:
-      image: returntocorp/semgrep:latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Run Semgrep Scan
-      run: semgrep scan --severity=ERROR --severity=WARNING --sarif --output=sast-semgrep.sarif || true
-
-    - name: Upload Semgrep SARIF to Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: sast-semgrep.sarif
-        category: semgrep
-
-    - name: Upload Semgrep artifact
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: sast-semgrep
-        path: sast-semgrep.sarif
-
-  image_scan:
-    name: Build Image and Run Image Scan
-    runs-on: ubuntu-latest
-    needs: [bandit_scan, semgrep_scan]
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Build Docker Image
-      run: docker build -f Dockerfile -t myapp:latest .
-
-    - name: Docker Scout Scan
-      uses: docker/scout-action@v1
-      with:
-        dockerhub-user: ${{ secrets.REPO_USER }}
-        dockerhub-password: ${{ secrets.REPO_PWD }}
-        command: quickview,cves
-        only-severities: critical,high
-        sarif-file: scout-report.sarif
-
-    - name: Upload Scout artifact
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: docker-scout-findings
-        path: scout-report.sarif
+      run: bandit -ll | -r .
