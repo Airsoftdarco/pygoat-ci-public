@@ -3,29 +3,56 @@ name: CI
 on: [push]
 
 jobs:
- sast_scan:
-   name: Run Bandit Scan
-   runs-on: ubuntu-latest
+  # TRABAJO 1: BANDIT (Tu código)
+  sast_scan:
+    name: Run Bandit Scan
+    runs-on: ubuntu-latest
 
-   steps:
-   - name: Checkout code
-     uses: actions/checkout@v4
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-   - name: Set up Python
-     uses: actions/setup-python@v5
-     with:
-       python-version: 3.11
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.11
 
-   - name: Install Bandit
-     run: pip install bandit
+    - name: Install Bandit
+      run: pip install bandit
 
-   - name: Run Bandit Scan
-     run: bandit -ll -ii -r . -f json -o bandit-report.json || true
+    - name: Run Bandit Scan
+      run: bandit -ll -ii -r . -f json -o bandit-report.json || true
 
-   - name: Upload Artifact
-     uses: actions/upload-artifact@v4
-     if: always()
-     with:
-      name: bandit-findings
-      path: bandit-report.json
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+       name: bandit-findings
+       path: bandit-report.json
+
+  # TRABAJO 2: SEMGREP (Se ejecutará en paralelo automáticamente)
+  semgrep_scan:
+    name: Run Semgrep Scan
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep:latest
       
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.11
+        
+    - name: Run Semgrep
+      # Ejecuta el escaneo ignorando vulnerabilidades bajas y exporta a JSON
+      run: semgrep scan --severity=ERROR --severity WARNING --json --output=sast-semgrep.json || true
+      
+    - name: Upload Semgrep Artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: semgrep-findings
+        path: sast-semgrep.json
